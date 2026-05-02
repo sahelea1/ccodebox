@@ -34,7 +34,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends nodejs \
  && npm install -g @anthropic-ai/claude-code \
  && curl -fsSL https://opencode.ai/install | bash \
- && curl -LsSf https://astral.sh/uv/install.sh | sh \
+ && curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
  && git config --system url."https://github.com/".insteadOf "git@github.com:" \
  && git config --system url."https://github.com/".insteadOf "ssh://git@github.com/" \
  && rm -rf /var/lib/apt/lists/*
