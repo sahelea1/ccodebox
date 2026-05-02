@@ -13,9 +13,12 @@ CLAUDE_JSON_FILE="$TEMPLATE_DIR/config/claude.json"
 OPENCODE_CONFIG_DIR="$TEMPLATE_DIR/config/opencode"
 OPENCODE_DATA_DIR="$TEMPLATE_DIR/config/opencode-data"
 
-UV_CACHE_DIR="$TEMPLATE_DIR/config/uv-cache"
-
 CONTINUOUS_CLAUDE_REPO="$TEMPLATE_DIR/continuous-claude"
+
+UV_CACHE_DIR="$TEMPLATE_DIR/config/uv-cache"
+UV_DATA_DIR="$TEMPLATE_DIR/config/uv-data"
+UV_STATE_DIR="$TEMPLATE_DIR/config/uv-state"
+LOCAL_BIN_DIR="$TEMPLATE_DIR/config/local-bin"
 
 REBUILD=0
 if [ "${1:-}" = "--rebuild" ]; then
@@ -26,8 +29,12 @@ mkdir -p "$MOUNT_DIR"
 mkdir -p "$CLAUDE_CONFIG_DIR"
 mkdir -p "$OPENCODE_CONFIG_DIR"
 mkdir -p "$OPENCODE_DATA_DIR"
-mkdir -p "$UV_CACHE_DIR"
 mkdir -p "$CONTINUOUS_CLAUDE_REPO"
+
+mkdir -p "$UV_CACHE_DIR"
+mkdir -p "$UV_DATA_DIR"
+mkdir -p "$UV_STATE_DIR"
+mkdir -p "$LOCAL_BIN_DIR"
 
 touch "$CLAUDE_JSON_FILE"
 
@@ -55,12 +62,16 @@ alacritty \
       -e CONTINUOUS_CLAUDE_REPO=\"$CONTINUOUS_CLAUDE_REPO\" \
       -e CLAUDE_CODE_SUBAGENT_MODEL=sonnet \
       -e UV_CACHE_DIR=/root/.cache/uv \
+      -e UV_TOOL_BIN_DIR=/root/.local/bin \
       -v \"$MOUNT_DIR:/workspace\" \
       -v \"$CLAUDE_CONFIG_DIR:/root/.claude\" \
       -v \"$CLAUDE_JSON_FILE:/root/.claude.json\" \
       -v \"$OPENCODE_CONFIG_DIR:/root/.config/opencode\" \
       -v \"$OPENCODE_DATA_DIR:/root/.local/share/opencode\" \
       -v \"$UV_CACHE_DIR:/root/.cache/uv\" \
+      -v \"$UV_DATA_DIR:/root/.local/share/uv\" \
+      -v \"$UV_STATE_DIR:/root/.local/state/uv\" \
+      -v \"$LOCAL_BIN_DIR:/root/.local/bin\" \
       -v \"$CONTINUOUS_CLAUDE_REPO:$CONTINUOUS_CLAUDE_REPO\" \
       \"$IMAGE_NAME\"
   " &
