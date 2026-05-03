@@ -21,6 +21,8 @@ community workflow toolkit (hooks, skills, agents) for Claude Code.
   `~/.local/share/coding-container-template/config/` on the host and survive
   container restarts.
 - **One command.** `cd` into a project, run `ccodebox`, get a coding shell.
+- **Auto-accept on.** Permission prompts are disabled by default
+  (`bypassPermissions`); see [Auto-accept](#auto-accept) below.
 
 ## Requirements
 
@@ -84,6 +86,28 @@ ccodebox --rebuild
 | `cc-uninstall`  | Remove the Continuous Claude hooks/skills/agents            |
 
 The aliases are added to `/root/.bashrc` by the entrypoint on first launch.
+
+### Auto-accept
+
+Because the container is sandboxed (no host filesystem access outside
+`./mount`, no host shell), it's safe to skip Claude Code's per-tool
+permission prompts. The entrypoint enables this two ways, both of which
+trigger Claude Code's `bypassPermissions` mode:
+
+1. It merges `permissions.defaultMode = "bypassPermissions"` into
+   `~/.claude/settings.json` (preserving any existing `allow` / `deny` /
+   `env` / hooks). This is the canonical Claude Code switch.
+2. The `claude` and `claude-opus` aliases also pass
+   `--dangerously-skip-permissions`, as a belt-and-suspenders fallback in
+   case `settings.json` is overridden.
+
+Result: every tool call (Bash, Edit, Write, MCP, ...) is auto-accepted
+inside the container.
+
+To turn it off, edit `~/.claude/settings.json` on the host and either set
+`"defaultMode"` to `"default"` / `"acceptEdits"` or delete the key. You can
+also bypass the alias for a single run with `command claude` or
+`\claude`.
 
 ### Continuous Claude (optional)
 
