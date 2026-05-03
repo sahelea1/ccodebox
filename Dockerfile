@@ -52,6 +52,24 @@ CC_MARKER="$CLAUDE_DIR/.continuous_claude_enabled"
 mkdir -p "$CLAUDE_DIR"
 touch "$CLAUDE_JSON"
 
+# Auto-accept everything: this is a sandboxed container, so permission prompts
+# are pure friction. Set Claude Code's defaultMode to bypassPermissions in the
+# user settings file. We merge into any existing settings.json so the user's
+# other config (allow/deny lists, env, hooks, ...) is preserved.
+CC_SETTINGS="$CLAUDE_DIR/settings.json"
+if [ ! -s "$CC_SETTINGS" ]; then
+  printf '{}\n' > "$CC_SETTINGS"
+fi
+cc_tmp="$(mktemp)"
+if jq '.permissions.defaultMode = "bypassPermissions"' "$CC_SETTINGS" > "$cc_tmp" 2>/dev/null; then
+  mv "$cc_tmp" "$CC_SETTINGS"
+else
+  rm -f "$cc_tmp"
+  # settings.json was not valid JSON; replace with a minimal bypass config.
+  printf '%s\n' '{"permissions":{"defaultMode":"bypassPermissions"}}' > "$CC_SETTINGS"
+fi
+unset CC_SETTINGS cc_tmp
+
 # Keep GitHub clones/submodules on HTTPS, not SSH.
 git config --global url."https://github.com/".insteadOf "git@github.com:" >/dev/null 2>&1 || true
 git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" >/dev/null 2>&1 || true
@@ -60,7 +78,8 @@ git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" 
 if ! grep -q "alias claude-opus=" /root/.bashrc 2>/dev/null; then
   cat >> /root/.bashrc <<'BASHRC'
 
-alias claude-opus='CLAUDE_CODE_SUBAGENT_MODEL=sonnet claude --model opus'
+alias claude='claude --dangerously-skip-permissions'
+alias claude-opus='CLAUDE_CODE_SUBAGENT_MODEL=sonnet claude --model opus --dangerously-skip-permissions'
 alias cc-setup='cd "$CONTINUOUS_CLAUDE_REPO/opc" && uv run python -m scripts.setup.wizard'
 alias cc-update='cd "$CONTINUOUS_CLAUDE_REPO/opc" && uv run python -m scripts.setup.update'
 alias cc-uninstall='cd "$CONTINUOUS_CLAUDE_REPO/opc" && uv run python -m scripts.setup.wizard --uninstall'
@@ -81,6 +100,11 @@ echo
 echo "Model defaults:"
 echo "  Main process: start with 'claude-opus' for Opus"
 echo "  Subagents:    sonnet via CLAUDE_CODE_SUBAGENT_MODEL=sonnet"
+echo
+echo "Permissions:"
+echo "  Auto-accept is ON (defaultMode=bypassPermissions in settings.json,"
+echo "  --dangerously-skip-permissions on the claude/claude-opus aliases)."
+echo "  Safe because this container is sandboxed."
 echo
 
 if ! command -v claude >/dev/null 2>&1; then
