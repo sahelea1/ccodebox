@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Build (if needed) and launch the ccodebox container in a new Alacritty window.
 set -euo pipefail
 
 IMAGE_NAME="claude-opencode-cli:latest"
@@ -20,9 +21,33 @@ UV_DATA_DIR="$TEMPLATE_DIR/config/uv-data"
 UV_STATE_DIR="$TEMPLATE_DIR/config/uv-state"
 LOCAL_BIN_DIR="$TEMPLATE_DIR/config/local-bin"
 
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [--rebuild] [--help]
+
+  --rebuild   Force a rebuild of the Docker image ($IMAGE_NAME).
+  --help      Show this message.
+
+The container mounts ./mount as /workspace.
+EOF
+}
+
 REBUILD=0
-if [ "${1:-}" = "--rebuild" ]; then
-  REBUILD=1
+case "${1:-}" in
+  "")            ;;
+  --rebuild)     REBUILD=1 ;;
+  -h|--help)     usage; exit 0 ;;
+  *)             usage; exit 2 ;;
+esac
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "error: 'docker' not found in PATH" >&2
+  exit 1
+fi
+
+if ! command -v alacritty >/dev/null 2>&1; then
+  echo "error: 'alacritty' not found in PATH" >&2
+  exit 1
 fi
 
 mkdir -p "$MOUNT_DIR"

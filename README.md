@@ -1,80 +1,119 @@
-sudo -i then:
+# ccodebox
 
-Ensure alacritty and docker is installed. 
+A one-command, containerized [Claude Code](https://claude.com/claude-code) workspace.
 
-copy Dockerfile and start.sh to /root/.local/share/coding-container-template/
+`ccodebox` spawns a fresh Ubuntu 24.04 Docker container with `claude`, `opencode`,
+`uv`, `ripgrep`, `tmux`, and a few other tools pre-installed, opens it in a new
+[Alacritty](https://alacritty.org/) window, and mounts the current project's
+`./mount` directory as `/workspace` inside the container. Your Claude Code
+configuration (auth, settings, plugins) is persisted between runs.
 
-do "chmod +x /root/.local/share/coding-container-template/start.sh"
+Optionally, on first launch the entrypoint offers to install
+[Continuous Claude v3](https://github.com/parcadei/Continuous-Claude-v3), a
+community workflow toolkit (hooks, skills, agents) for Claude Code.
 
-add this to ~/.zshrc
--------
+## Why
 
+- **Sandbox.** Claude Code runs as root inside a container; it cannot touch
+  your host filesystem outside the project's `mount/` directory.
+- **Reproducible.** Every project gets the same image and the same toolchain.
+- **Persistent config.** `~/.claude` and `~/.claude.json` are stored under
+  `~/.local/share/coding-container-template/config/` on the host and survive
+  container restarts.
+- **One command.** `cd` into a project, run `ccodebox`, get a coding shell.
 
-ccodebox() {
-  local template_dir="/root/.local/share/coding-container-template"
-  systemctl start docker
-  mkdir -p ./mount
+## Requirements
 
-  cp "$template_dir/Dockerfile" ./Dockerfile
-  cp "$template_dir/start.sh" ./start.sh
-  chmod +x ./start.sh
+- Linux host with `systemd` (the wrapper does `systemctl start docker`)
+- [Docker](https://docs.docker.com/engine/install/) (running, with the host
+  socket at `/var/run/docker.sock`)
+- [Alacritty](https://alacritty.org/)
+- `bash` or `zsh`
+- Run as `root` (the template lives under `/root/...` and the container runs
+  as root). The simplest path is `sudo -i` first.
 
-  ./start.sh
-}
-
-
-
--------
-
-execute in root terminal with "ccodebox" command. -> session starts
-
-
-
-Cheatsheet for myself:
-
-
-
-
-
-
-
-````
-# Continuous Claude Usage Cheat Sheet
-
-## Start
+## Install
 
 ```bash
-cd /workspace/dein-projekt
+sudo -i
+git clone https://github.com/sahelea1/ccodebox.git
+cd ccodebox
+./install.sh
+```
+
+The installer:
+
+1. Copies `Dockerfile` and `start.sh` to `~/.local/share/coding-container-template/`.
+2. Appends a `ccodebox` shell function to `~/.zshrc` or `~/.bashrc`
+   (auto-detected from `$SHELL`; pass `--rc <path>` to override).
+
+Reload your shell, or `source` your rc file, to pick up the new function:
+
+```bash
+source ~/.zshrc   # or ~/.bashrc
+```
+
+## Usage
+
+In any project directory:
+
+```bash
+ccodebox
+```
+
+This will:
+
+1. Build the Docker image on first run (cached afterwards).
+2. Create `./mount/` if it doesn't exist (mounted as `/workspace`).
+3. Open a new Alacritty window with a Bash session inside the container.
+
+Rebuild the image after editing the `Dockerfile`:
+
+```bash
+ccodebox --rebuild
+```
+
+### Inside the container
+
+| Command         | What it does                                                |
+| --------------- | ----------------------------------------------------------- |
+| `claude-opus`   | Claude Code with Opus as main model, Sonnet as subagents    |
+| `claude`        | Claude Code with default settings                           |
+| `cc-setup`      | Run the Continuous Claude setup wizard                      |
+| `cc-update`     | Update the Continuous Claude installation                   |
+| `cc-uninstall`  | Remove the Continuous Claude hooks/skills/agents            |
+
+The aliases are added to `/root/.bashrc` by the entrypoint on first launch.
+
+### Continuous Claude (optional)
+
+On first run the entrypoint asks whether to install
+[Continuous Claude v3](https://github.com/parcadei/Continuous-Claude-v3).
+It's a community project, not Anthropic. Saying "no" leaves the container
+fully usable with stock Claude Code; you can run `cc-setup` later.
+
+## Workflow cheatsheet
+
+A short reference for the Continuous Claude workflows. Skip if you didn't
+install it.
+
+### Start a session
+
+```bash
+cd /workspace/my-project
 claude-opus
-````
+```
 
-Setup prüfen:
+Inside Claude:
 
-```text
+```
 /workflow
 ```
 
----
+### New project (greenfield)
 
-## Modell-Setup
-
-```text
-Main-Prozess: Opus
-Subagents: Sonnet
 ```
-
-Nur wenn du bewusst ohne Opus starten willst:
-
-```bash
-claude
-```
-
----
-
-## Neues Projekt
-
-```text
-/build greenfield "Projektziel kurz beschreiben"
+/build greenfield "AI productivity app with auth, dashboard and multi-LLM routing"
 
 Use Continuous Claude workflows.
 Keep context minimal and sufficient.
@@ -83,18 +122,10 @@ Create/update handoff after milestones.
 Do not overengineer.
 ```
 
-Beispiel:
+### Extending an existing project (brownfield)
 
-```text
-/build greenfield "AI productivity app with auth, dashboard, backend API and multi-LLM routing"
 ```
-
----
-
-## Bestehendes Projekt erweitern
-
-```text
-/build brownfield "Feature kurz beschreiben"
+/build brownfield "add image upload to the existing chat"
 
 Use existing conventions.
 Do not scan the whole repo.
@@ -104,18 +135,10 @@ Run targeted verification.
 Update handoff.
 ```
 
-Beispiel:
+### Fix a bug
 
-```text
-/build brownfield "add image upload to the existing chat"
 ```
-
----
-
-## Bug fixen
-
-```text
-/fix bug "Bug kurz beschreiben"
+/fix bug "login redirects to wrong page after OAuth"
 
 Find root cause first.
 Make the smallest safe fix.
@@ -123,51 +146,22 @@ Run targeted verification.
 Update handoff with cause and fix.
 ```
 
-Beispiel:
+### Explore a codebase
 
-```text
-/fix bug "login redirects to wrong page after OAuth"
 ```
-
----
-
-## Codebase verstehen
-
-```text
 /explore
-```
-
-Oder gezielter:
-
-```text
 /explore "understand auth flow and API structure"
 ```
 
----
+### Risk-check a large change
 
-## Risikoanalyse vor großem Umbau
-
-```text
-/premortem "geplante Änderung beschreiben"
 ```
-
-Beispiel:
-
-```text
 /premortem "migrate auth from custom sessions to Auth.js"
 ```
 
----
+### End of session
 
-## Session beenden
-
-```text
-create_handoff
 ```
-
-Besser:
-
-```text
 Create a handoff now.
 
 Include:
@@ -180,29 +174,17 @@ Include:
 - exact next steps
 ```
 
----
+### Resume a session
 
-## Session fortsetzen
-
-```text
-resume_handoff
 ```
-
-Besser:
-
-```text
 resume_handoff
 
 Summarize where we are, then continue with the next concrete task.
 ```
 
----
+### Default prompt prefix
 
-## Gute Standard-Prompts
-
-### Für fast jede Aufgabe
-
-```text
+```
 Use Continuous Claude workflows.
 Keep context minimal and sufficient.
 Do not scan the whole repo.
@@ -212,79 +194,61 @@ Run the smallest relevant verification.
 Update handoff when done.
 ```
 
-### Für API/Frontend-Arbeit
+### Glossary
 
-```text
-Use the API contract as source of truth.
-Do not inspect backend implementation for frontend-only work unless the contract is missing or inconsistent.
-If backend verification is needed, use an agent and return only a summary.
-```
+| Term         | Meaning                                                |
+| ------------ | ------------------------------------------------------ |
+| `greenfield` | new project from scratch                               |
+| `brownfield` | extending an existing project                          |
+| `handoff`    | saved working state for a later session                |
+| `agent`      | offloaded helper with its own context window           |
+| `skill`      | specialized workflow / capability                      |
+| `hook`       | automatic rule or action triggered in the background   |
 
-### Für bestehende Projekte
+## Update / uninstall
 
-```text
-Respect existing architecture, naming, style and conventions.
-Avoid unrelated refactors.
-Make the smallest safe change.
-```
-
----
-
-## Begriffe
-
-```text
-greenfield = neues Projekt von 0
-brownfield = bestehendes Projekt erweitern
-handoff    = gespeicherter Arbeitsstand für spätere Sessions
-agent      = ausgelagerter Helfer mit eigenem Kontext
-skill      = spezialisierter Workflow / Fähigkeit
-hook       = automatische Regel oder Aktion im Hintergrund
-```
-
----
-
-## Vermeiden
-
-```text
-Lies die ganze Codebase.
-Mach einfach alles fertig.
-Refactor mal alles.
-Mach es perfekt.
-```
-
-Besser:
-
-```text
-Ziel + Kontextgrenze + Verifikation + Handoff
-```
-
----
-
-## Updates / Wartung
-
-Im Container:
+Update the host-side template files after `git pull`:
 
 ```bash
-cc-update
+cd /root/ccodebox
+git pull
+./install.sh
 ```
 
 Uninstall:
 
 ```bash
-cc-uninstall
+./install.sh --uninstall
 ```
 
-Docker prüfen:
+This removes the `ccodebox` function from your rc file and offers to delete
+`~/.local/share/coding-container-template/`. To remove the Docker image too:
 
 ```bash
-docker ps
+docker rmi claude-opencode-cli:latest
 ```
 
-GitHub HTTPS-Rewrite prüfen:
+## Troubleshooting
 
-```bash
-git config --global --get-regexp '^url\.https://github\.com/'
-```
+- **`docker: Cannot connect to the Docker daemon`** — `systemctl start docker`.
+  The `ccodebox` function tries this for you.
+- **Alacritty doesn't open** — install it via your distro's package manager
+  (`apt install alacritty`, `pacman -S alacritty`, ...).
+- **`/var/run/docker.sock` not mounted** — the entrypoint warns if the host
+  Docker socket isn't visible inside the container. Continuous Claude needs it
+  to run PostgreSQL. Make sure Docker is running on the host before launching.
+- **Verify the GitHub HTTPS rewrite** (the image forces HTTPS clones over SSH):
+
+  ```bash
+  git config --global --get-regexp '^url\.https://github\.com/'
+  ```
+
+## Layout
 
 ```
+.
+├── Dockerfile        # base image: Ubuntu 24.04 + claude/opencode/uv/...
+├── start.sh          # builds the image (if needed) and opens an Alacritty session
+├── install.sh        # installs the template + shell function
+└── README.md
 ```
