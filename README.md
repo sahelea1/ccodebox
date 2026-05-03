@@ -276,3 +276,111 @@ docker rmi claude-opencode-cli:latest
 ├── install.sh        # installs the template + shell function
 └── README.md
 ```
+
+
+
+
+
+
+Initial prompt template:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/build greenfield "<PROJECT_NAME>"
+
+Initialize this project for Continuous Claude v3 usage.
+
+Important execution mode:
+Main Opus is the orchestrator, not the bulk worker.
+
+Main Opus should only keep:
+- short summaries
+- architecture decisions
+- minimal implementation plans
+- changed file lists
+- verification results
+- unresolved blockers
+- next steps
+
+Use Sonnet agents/tools for:
+- broad repo exploration
+- file discovery
+- fixture/page-source/log inspection
+- test failure analysis
+- documentation sync
+- QA/security review
+- release/build checks
+
+Context rules:
+- Do not scan the whole repo unnecessarily.
+- Do not load large raw files, screenshots, generated files, build outputs, lockfiles, node_modules, vendor folders or long logs into main context.
+- Agents may inspect large files and return concise summaries.
+- Before editing, identify the minimal file set.
+- Prefer project docs/contracts/maps before implementation files.
+- If context grows too large, stop, create/update handoff, and tell me the next prompt to run.
+
+Goal:
+Create a reusable project context layer so future tasks can be done with low main-context usage.
+
+First inspect the project minimally and create/update these files if useful:
+- CLAUDE.md
+- docs/ai/project-map.md
+- docs/ai/current-state.md
+- docs/ai/architecture.md
+- docs/ai/api-contract.md, only if the project has APIs
+- docs/ai/release-process.md, only if the project has a build/release flow
+- docs/ai/testing.md
+- docs/ai/decisions.md
+- docs/ai/handoff.md
+
+Keep these files concise and practical.
+Do not create unnecessary documentation.
+
+The docs should answer:
+- What does this project do?
+- What stack/frameworks are used?
+- Where are important files/directories?
+- How is the app started locally?
+- How is it built/tested/linted?
+- What are the current supported features?
+- What are fragile/risky areas?
+- What should future Claude sessions read first?
+- What files should future Claude sessions avoid reading unless needed?
+- What are the current next tasks?
+
+CLAUDE.md should be short and act as a router:
+- tell Claude what docs to read for which task type
+- define Main Opus as orchestrator
+- tell Claude to use agents/tools for broad exploration
+- tell Claude not to scan the whole repo
+- tell Claude to update handoff/current-state after meaningful work
+
+Also configure project workflow:
+1. Detect existing branch/state.
+2. Do not implement product features yet.
+3. Do not do broad refactors.
+4. Do not change runtime behavior unless needed for setup.
+5. Add only Continuous-Claude/project-context documentation/config files.
+6. Run only safe verification commands needed to understand the project.
+7. Create/update handoff.
+8. Commit the added/updated context files to the current branch. Do not push.
+
+Final response:
+- project summary
+- files created/updated
+- verification commands run
+- commit hash
+- recommended next prompt
