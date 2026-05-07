@@ -61,12 +61,11 @@ if [ ! -s "$CC_SETTINGS" ]; then
   printf '{}\n' > "$CC_SETTINGS"
 fi
 cc_tmp="$(mktemp)"
-if jq '.permissions.defaultMode = "bypassPermissions"' "$CC_SETTINGS" > "$cc_tmp" 2>/dev/null; then
+if jq '.permissions.defaultMode = "acceptEdits"' "$CC_SETTINGS" > "$cc_tmp" 2>/dev/null; then
   mv "$cc_tmp" "$CC_SETTINGS"
 else
   rm -f "$cc_tmp"
-  # settings.json was not valid JSON; replace with a minimal bypass config.
-  printf '%s\n' '{"permissions":{"defaultMode":"bypassPermissions"}}' > "$CC_SETTINGS"
+  printf '%s\n' '{"permissions":{"defaultMode":"acceptEdits"}}' > "$CC_SETTINGS"
 fi
 unset CC_SETTINGS cc_tmp
 
@@ -101,8 +100,7 @@ echo "  Main process: start with 'claude-opus' for Opus"
 echo "  Subagents:    sonnet via CLAUDE_CODE_SUBAGENT_MODEL=sonnet"
 echo
 echo "Permissions:"
-echo "  Auto-accept is ON (defaultMode=bypassPermissions in settings.json)."
-echo "  Safe because this container is sandboxed."
+echo "  defaultMode=acceptEdits (auto-accepts file edits; prompts for shell commands)."
 echo
 
 if ! command -v claude >/dev/null 2>&1; then
