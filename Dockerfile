@@ -78,8 +78,7 @@ git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" 
 if ! grep -q "alias claude-opus=" /root/.bashrc 2>/dev/null; then
   cat >> /root/.bashrc <<'BASHRC'
 
-alias claude='claude --dangerously-skip-permissions'
-alias claude-opus='CLAUDE_CODE_SUBAGENT_MODEL=sonnet claude --model opus --dangerously-skip-permissions'
+alias claude-opus='CLAUDE_CODE_SUBAGENT_MODEL=sonnet claude --model opus'
 alias cc-setup='cd "$CONTINUOUS_CLAUDE_REPO/opc" && uv run python -m scripts.setup.wizard'
 alias cc-update='cd "$CONTINUOUS_CLAUDE_REPO/opc" && uv run python -m scripts.setup.update'
 alias cc-uninstall='cd "$CONTINUOUS_CLAUDE_REPO/opc" && uv run python -m scripts.setup.wizard --uninstall'
@@ -102,8 +101,7 @@ echo "  Main process: start with 'claude-opus' for Opus"
 echo "  Subagents:    sonnet via CLAUDE_CODE_SUBAGENT_MODEL=sonnet"
 echo
 echo "Permissions:"
-echo "  Auto-accept is ON (defaultMode=bypassPermissions in settings.json,"
-echo "  --dangerously-skip-permissions on the claude/claude-opus aliases)."
+echo "  Auto-accept is ON (defaultMode=bypassPermissions in settings.json)."
 echo "  Safe because this container is sandboxed."
 echo
 
@@ -172,6 +170,7 @@ else
 fi
 
 echo
+cd /workspace
 exec /bin/bash
 EOF
 
