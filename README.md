@@ -3,10 +3,10 @@
 A one-command, containerized [Claude Code](https://claude.com/claude-code) workspace.
 
 `ccodebox` spawns a fresh Ubuntu 24.04 Docker container with `claude`, `opencode`,
-`uv`, `ripgrep`, `tmux`, and a few other tools pre-installed, opens it in a new
-[Alacritty](https://alacritty.org/) window, and mounts the current project's
-`./mount` directory as `/workspace` inside the container. Your Claude Code
-configuration (auth, settings, plugins) is persisted between runs.
+`uv`, `ripgrep`, `tmux`, and a few other tools pre-installed, drops you into a
+shell inside it, and mounts the current project's `./mount` directory as
+`/workspace` inside the container. Your Claude Code configuration (auth,
+settings, plugins) is persisted between runs.
 
 Optionally, on first launch the entrypoint offers to install
 [Continuous Claude v3](https://github.com/parcadei/Continuous-Claude-v3), a
@@ -29,7 +29,6 @@ community workflow toolkit (hooks, skills, agents) for Claude Code.
 - Linux host with `systemd` (the wrapper does `systemctl start docker`)
 - [Docker](https://docs.docker.com/engine/install/) (running, with the host
   socket at `/var/run/docker.sock`)
-- [Alacritty](https://alacritty.org/)
 - `bash` or `zsh`
 - Run as `root` (the template lives under `/root/...` and the container runs
   as root). The simplest path is `sudo -i` first.
@@ -67,7 +66,7 @@ This will:
 
 1. Build the Docker image on first run (cached afterwards).
 2. Create `./mount/` if it doesn't exist (mounted as `/workspace`).
-3. Open a new Alacritty window with a Bash session inside the container.
+3. Drop you into a Bash session inside the container, in the current terminal.
 
 Rebuild the image after editing the `Dockerfile`:
 
@@ -256,8 +255,6 @@ docker rmi claude-opencode-cli:latest
 
 - **`docker: Cannot connect to the Docker daemon`** — `systemctl start docker`.
   The `ccodebox` function tries this for you.
-- **Alacritty doesn't open** — install it via your distro's package manager
-  (`apt install alacritty`, `pacman -S alacritty`, ...).
 - **`/var/run/docker.sock` not mounted** — the entrypoint warns if the host
   Docker socket isn't visible inside the container. Continuous Claude needs it
   to run PostgreSQL. Make sure Docker is running on the host before launching.
@@ -272,7 +269,7 @@ docker rmi claude-opencode-cli:latest
 ```
 .
 ├── Dockerfile        # base image: Ubuntu 24.04 + claude/opencode/uv/...
-├── start.sh          # builds the image (if needed) and opens an Alacritty session
+├── start.sh          # builds the image (if needed) and runs the container
 ├── install.sh        # installs the template + shell function
 └── README.md
 ```

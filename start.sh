@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build (if needed) and launch the ccodebox container in a new Alacritty window.
+# Build (if needed) and launch the ccodebox container in the current terminal.
 set -euo pipefail
 
 IMAGE_NAME="claude-opencode-cli:latest"
@@ -45,11 +45,6 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v alacritty >/dev/null 2>&1; then
-  echo "error: 'alacritty' not found in PATH" >&2
-  exit 1
-fi
-
 mkdir -p "$MOUNT_DIR"
 mkdir -p "$CLAUDE_CONFIG_DIR"
 mkdir -p "$OPENCODE_CONFIG_DIR"
@@ -79,24 +74,22 @@ else
   echo "Continuous Claude setup needs host Docker for PostgreSQL."
 fi
 
-alacritty \
-  --working-directory "$PROJECT_DIR" \
-  -e bash -lc "
-    docker run --rm -it \
-      $DOCKER_SOCKET_ARGS \
-      -e CONTINUOUS_CLAUDE_REPO=\"$CONTINUOUS_CLAUDE_REPO\" \
-      -e CLAUDE_CODE_SUBAGENT_MODEL=sonnet \
-      -e UV_CACHE_DIR=/root/.cache/uv \
-      -e UV_TOOL_BIN_DIR=/root/.local/bin \
-      -v \"$MOUNT_DIR:/workspace\" \
-      -v \"$CLAUDE_CONFIG_DIR:/root/.claude\" \
-      -v \"$CLAUDE_JSON_FILE:/root/.claude.json\" \
-      -v \"$OPENCODE_CONFIG_DIR:/root/.config/opencode\" \
-      -v \"$OPENCODE_DATA_DIR:/root/.local/share/opencode\" \
-      -v \"$UV_CACHE_DIR:/root/.cache/uv\" \
-      -v \"$UV_DATA_DIR:/root/.local/share/uv\" \
-      -v \"$UV_STATE_DIR:/root/.local/state/uv\" \
-      -v \"$LOCAL_BIN_DIR:/root/.local/bin\" \
-      -v \"$CONTINUOUS_CLAUDE_REPO:$CONTINUOUS_CLAUDE_REPO\" \
-      \"$IMAGE_NAME\"
-  " &
+cd "$PROJECT_DIR"
+
+exec docker run --rm -it \
+  $DOCKER_SOCKET_ARGS \
+  -e CONTINUOUS_CLAUDE_REPO="$CONTINUOUS_CLAUDE_REPO" \
+  -e CLAUDE_CODE_SUBAGENT_MODEL=sonnet \
+  -e UV_CACHE_DIR=/root/.cache/uv \
+  -e UV_TOOL_BIN_DIR=/root/.local/bin \
+  -v "$MOUNT_DIR:/workspace" \
+  -v "$CLAUDE_CONFIG_DIR:/root/.claude" \
+  -v "$CLAUDE_JSON_FILE:/root/.claude.json" \
+  -v "$OPENCODE_CONFIG_DIR:/root/.config/opencode" \
+  -v "$OPENCODE_DATA_DIR:/root/.local/share/opencode" \
+  -v "$UV_CACHE_DIR:/root/.cache/uv" \
+  -v "$UV_DATA_DIR:/root/.local/share/uv" \
+  -v "$UV_STATE_DIR:/root/.local/state/uv" \
+  -v "$LOCAL_BIN_DIR:/root/.local/bin" \
+  -v "$CONTINUOUS_CLAUDE_REPO:$CONTINUOUS_CLAUDE_REPO" \
+  "$IMAGE_NAME"
