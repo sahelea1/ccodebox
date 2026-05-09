@@ -60,8 +60,7 @@ remove_block() {
 }
 
 check_prereqs() {
-  command -v docker    >/dev/null 2>&1 || warn "docker not found in PATH"
-  command -v alacritty >/dev/null 2>&1 || warn "alacritty not found in PATH"
+  command -v docker >/dev/null 2>&1 || warn "docker not found in PATH"
 }
 
 install_template() {
