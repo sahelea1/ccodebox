@@ -1,179 +1,96 @@
-FROM ubuntu:24.04
+# syntax=docker/dockerfile:1.6
+#
+# ccodebox / detached-persistent
+#
+# A single self-contained image that runs the OpenCode web UI and ships with
+# the sahelea1/continuous-code agent-orchestration project pre-installed, so
+# the "continuous claude" workflow is available out of the box.
+#
+# State (sessions, history, opencode data, auth, project files) is written
+# under /data, which is bind-mounted to a named docker volume in
+# docker-compose.yml. That is the only thing that needs to persist.
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV CLAUDE_CONFIG_DIR=/root/.claude
-ENV CLAUDE_CODE_SUBAGENT_MODEL=sonnet
-ENV CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=120000
-ENV PATH="/root/.opencode/bin:/root/.local/bin:${PATH}"
+FROM node:20-bookworm-slim
 
+ENV DEBIAN_FRONTEND=noninteractive \
+    PATH="/root/.bun/bin:/root/.opencode/bin:${PATH}" \
+    # Pin the continuous-code revision so rebuilds are reproducible.
+    CONTINUOUS_CODE_REPO="https://github.com/sahelea1/continuous-code.git" \
+    CONTINUOUS_CODE_REF="daa00c3eec83d9e91de6bc05701e901371956266" \
+    # Pin the opencode CLI version so rebuilds are reproducible and we don't
+    # depend on api.github.com being reachable / unrate-limited at build time.
+    OPENCODE_VERSION="1.14.50"
+
+# System deps. tini gives clean PID 1 signal handling so `docker stop` is fast.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       bash \
       ca-certificates \
       curl \
       git \
-      gnupg \
       jq \
-      less \
-      openssh-client \
-      python3 \
-      python3-pip \
-      ripgrep \
-      tmux \
-      vim \
-      xz-utils \
- && install -m 0755 -d /etc/apt/keyrings \
- && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
- && chmod a+r /etc/apt/keyrings/docker.asc \
- && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list \
- && apt-get update \
- && apt-get install -y --no-install-recommends \
-      docker-ce-cli \
-      docker-compose-plugin \
- && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
- && apt-get install -y --no-install-recommends nodejs \
- && npm install -g @anthropic-ai/claude-code \
- && curl -fsSL https://opencode.ai/install | bash \
- && curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
- && git config --system url."https://github.com/".insteadOf "git@github.com:" \
- && git config --system url."https://github.com/".insteadOf "ssh://git@github.com/" \
+      tini \
+      unzip \
  && rm -rf /var/lib/apt/lists/*
 
-RUN cat > /usr/local/bin/vibecoding-entrypoint <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
+# Optional: if the build context contains a `.extra-ca.crt` file (e.g. you are
+# behind a TLS-intercepting corporate / sandbox proxy), trust it. Gitignored
+# by default. Skipped silently if the file is absent.
+COPY .extra-ca.cr[t] /usr/local/share/ca-certificates/extra-ca.crt
+RUN if [ -s /usr/local/share/ca-certificates/extra-ca.crt ]; then \
+      update-ca-certificates ; \
+      # Make the system CA bundle visible to Node/Bun/npm too.
+      echo "NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt" >> /etc/environment ; \
+    else \
+      rm -f /usr/local/share/ca-certificates/extra-ca.crt ; \
+    fi
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt \
+    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 
-CLAUDE_DIR="/root/.claude"
-CLAUDE_JSON="/root/.claude.json"
+# Bun (fast install for the continuous-code plugin) + OpenCode (pinned).
+RUN curl -fsSL https://bun.sh/install | bash \
+ && curl -fsSL https://opencode.ai/install | bash -s -- --version "${OPENCODE_VERSION}"
 
-CC_REPO="${CONTINUOUS_CLAUDE_REPO:-/root/continuous-claude}"
-CC_MARKER="$CLAUDE_DIR/.continuous_claude_enabled"
+# Bring in the continuous-code project. Default path: git clone at pinned SHA.
+# Fallback: if a `.continuous-code-snapshot/` directory exists in the build
+# context (gitignored, useful behind private-repo / offline builds), use it
+# instead. Both paths produce the same end state under /opt/continuous-code.
+#
+# `COPY` with an optional glob (the `[t]` in the path) lets the build succeed
+# whether the snapshot is present or not — when absent, nothing is copied.
+COPY .continuous-code-snapsho[t] /opt/continuous-code-snapshot/
+RUN set -e ; \
+    if [ -d /opt/continuous-code-snapshot ] && [ -n "$(ls -A /opt/continuous-code-snapshot 2>/dev/null)" ]; then \
+      echo "Using pre-staged continuous-code snapshot from build context" ; \
+      mv /opt/continuous-code-snapshot /opt/continuous-code ; \
+    else \
+      echo "Cloning ${CONTINUOUS_CODE_REPO} at ${CONTINUOUS_CODE_REF}" ; \
+      rm -rf /opt/continuous-code-snapshot ; \
+      git clone "${CONTINUOUS_CODE_REPO}" /opt/continuous-code ; \
+      git -C /opt/continuous-code checkout "${CONTINUOUS_CODE_REF}" ; \
+    fi ; \
+    cd /opt/continuous-code ; \
+    bun install ; \
+    npx tsc ; \
+    mkdir -p /opt/opencode-config/agents /opt/opencode-config/commands ; \
+    cp agents/*.md /opt/opencode-config/agents/ ; \
+    cp commands/*.md /opt/opencode-config/commands/ ; \
+    printf '{"dependencies":{}}\n' > /opt/opencode-config/package.json ; \
+    (cd /opt/opencode-config && npm install file:///opt/continuous-code --save) ; \
+    cp /opt/continuous-code/opencode.json /opt/opencode-config/opencode.json
 
-mkdir -p "$CLAUDE_DIR"
-touch "$CLAUDE_JSON"
+# Entrypoint: sync persistent dirs, launch opencode web on 0.0.0.0:7878.
+COPY entrypoint.sh /usr/local/bin/ccodebox-entrypoint
+RUN chmod +x /usr/local/bin/ccodebox-entrypoint
 
-# Auto-accept everything: this is a sandboxed container, so permission prompts
-# are pure friction. Set Claude Code's defaultMode to bypassPermissions in the
-# user settings file. We merge into any existing settings.json so the user's
-# other config (allow/deny lists, env, hooks, ...) is preserved.
-CC_SETTINGS="$CLAUDE_DIR/settings.json"
-if [ ! -s "$CC_SETTINGS" ]; then
-  printf '{}\n' > "$CC_SETTINGS"
-fi
-cc_tmp="$(mktemp)"
-if jq '.permissions.defaultMode = "acceptEdits"' "$CC_SETTINGS" > "$cc_tmp" 2>/dev/null; then
-  mv "$cc_tmp" "$CC_SETTINGS"
-else
-  rm -f "$cc_tmp"
-  printf '%s\n' '{"permissions":{"defaultMode":"acceptEdits"}}' > "$CC_SETTINGS"
-fi
-unset CC_SETTINGS cc_tmp
+# /data is the only persistent location. docker-compose mounts a named volume
+# here. Subdirectories:
+#   /data/workspace        -> user's project files; opencode runs against this
+#   /data/opencode-config  -> ~/.config/opencode  (agents, commands, plugin)
+#   /data/opencode-share   -> ~/.local/share/opencode (sessions, auth, history)
+#   /data/thoughts         -> continuous-code handoffs & ledgers
+RUN mkdir -p /data
 
-# Keep GitHub clones/submodules on HTTPS, not SSH.
-git config --global url."https://github.com/".insteadOf "git@github.com:" >/dev/null 2>&1 || true
-git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" >/dev/null 2>&1 || true
+EXPOSE 7878
 
-# Convenience aliases for interactive shell.
-if ! grep -q "alias claude-opus=" /root/.bashrc 2>/dev/null; then
-  cat >> /root/.bashrc <<'BASHRC'
-
-alias claude-opus='CLAUDE_CODE_SUBAGENT_MODEL=sonnet claude --model opus'
-alias cc-setup='cd "$CONTINUOUS_CLAUDE_REPO/opc" && uv run python -m scripts.setup.wizard'
-alias cc-update='cd "$CONTINUOUS_CLAUDE_REPO/opc" && uv run python -m scripts.setup.update'
-alias cc-uninstall='cd "$CONTINUOUS_CLAUDE_REPO/opc" && uv run python -m scripts.setup.wizard --uninstall'
-BASHRC
-fi
-
-echo
-echo "Vibecoding container ready."
-echo "Workspace: /workspace"
-echo
-echo "Claude config is persistent:"
-echo "  $CLAUDE_DIR"
-echo "  $CLAUDE_JSON"
-echo
-echo "Continuous Claude repo:"
-echo "  $CC_REPO"
-echo
-echo "Model defaults:"
-echo "  Main process: start with 'claude-opus' for Opus"
-echo "  Subagents:    sonnet via CLAUDE_CODE_SUBAGENT_MODEL=sonnet"
-echo
-echo "Permissions:"
-echo "  defaultMode=acceptEdits (auto-accepts file edits; prompts for shell commands)."
-echo
-
-if ! command -v claude >/dev/null 2>&1; then
-  echo "ERROR: claude command not found."
-  exec /bin/bash
-fi
-
-if ! command -v uv >/dev/null 2>&1; then
-  echo "ERROR: uv command not found."
-  exec /bin/bash
-fi
-
-if ! command -v docker >/dev/null 2>&1; then
-  echo "ERROR: docker CLI not found."
-  exec /bin/bash
-fi
-
-if [ ! -S /var/run/docker.sock ]; then
-  echo "WARNING: /var/run/docker.sock is not mounted."
-  echo "Continuous Claude setup needs Docker for PostgreSQL."
-  echo "Fix: make sure Docker is running on the host and start with the provided start.sh."
-  echo
-fi
-
-if [ ! -d "$CC_REPO/.git" ]; then
-  echo "Cloning Continuous Claude via HTTPS..."
-  mkdir -p "$(dirname "$CC_REPO")"
-  git clone https://github.com/parcadei/Continuous-Claude-v3.git "$CC_REPO"
-else
-  echo "Continuous Claude repo already exists."
-fi
-
-if [ ! -f "$CC_MARKER" ]; then
-  echo
-  echo "Continuous Claude v3 is a community project, not official Anthropic."
-  echo "It will install hooks/skills/agents into your persistent ~/.claude config."
-  echo
-  read -r -p "Run Continuous Claude setup wizard now? [y/N] " answer || answer=""
-
-  case "$answer" in
-    y|Y|yes|YES|Yes)
-      echo
-      echo "Running Continuous Claude setup wizard..."
-      echo "Directory: $CC_REPO/opc"
-      echo
-      cd "$CC_REPO/opc"
-      uv run python -m scripts.setup.wizard
-      touch "$CC_MARKER"
-      echo
-      echo "Continuous Claude setup finished."
-      echo "Start Claude with: claude-opus"
-      echo "Try inside Claude: /workflow"
-      ;;
-    *)
-      echo "Skipping Continuous Claude setup."
-      echo
-      echo "You can run it later with:"
-      echo "  cc-setup"
-      ;;
-  esac
-else
-  echo "Continuous Claude already enabled."
-  echo "Update later with: cc-update"
-  echo "Uninstall with:  cc-uninstall"
-fi
-
-echo
-cd /workspace
-exec /bin/bash
-EOF
-
-RUN chmod +x /usr/local/bin/vibecoding-entrypoint
-
-WORKDIR /workspace
-
-CMD ["/usr/local/bin/vibecoding-entrypoint"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/ccodebox-entrypoint"]

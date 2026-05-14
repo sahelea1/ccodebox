@@ -1,0 +1,21 @@
+# Local environment with secrets.
+.env
+.env.local
+.env.*.local
+
+# Optional CA bundle for build-time use behind a TLS-intercepting proxy.
+# Not committed — purely a local convenience.
+.extra-ca.crt
+
+# Optional pre-staged snapshot of continuous-code, used as a fallback when
+# the build host cannot reach github.com (private repo, offline build, etc.).
+# Not committed — the default build path clones from github.
+.continuous-code-snapshot/
+
+# OS / editor cruft.
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
