@@ -2,12 +2,12 @@
 #
 # One service. One named volume. State persists across:
 #   docker compose stop / start
-#   docker compose down                (removes the container, keeps the volume)
+#   docker compose down              (removes the container, keeps the volume)
 #   host reboots
 #
 # State is wiped only by:
-#   docker compose down -v             (-v removes named volumes)
-#   docker volume rm ccodebox_data     (explicit destroy)
+#   docker compose down -v           (-v removes named volumes)
+#   docker volume rm ccodebox_data   (explicit destroy)
 
 services:
   ccodebox:
@@ -18,7 +18,7 @@ services:
     restart: unless-stopped
     ports:
       # Host port : container port. Override with PORT=9000 docker compose up -d.
-      - "${PORT:-7878}:7878"
+      - "0.0.0.0:7878:7878"
     environment:
       # OLLAMA_API_KEY is read from .env (gitignored). The .env.example file
       # documents the required name. Never commit the value.
@@ -30,10 +30,7 @@ services:
       OPENCODE_PORT: "7878"
       OPENCODE_HOSTNAME: "0.0.0.0"
     volumes:
-      - ccodebox_data:/data
-
-volumes:
-  # Named volume. Survives `docker compose down`. Only `docker compose down -v`
-  # or an explicit `docker volume rm` will remove it.
-  ccodebox_data:
-    name: ccodebox_data
+      - ./workspace:/data
+      - ./claude-config:/root/.claude
+      - ./opencode-config:/root/.config/opencode
+      - ~/.ssh:/root/.ssh:ro
