@@ -83,9 +83,34 @@ ln -sfn "$OPENCODE_SHARE_DIR"  /root/.local/share/opencode
 ln -sfn "$CLAUDE_CONFIG_HOST"  /root/.claude
 ln -sfn "$CLAUDE_JSON_HOST"    /root/.claude.json
 
+# First-time seed: copy the Continuous Claude v3 integration (agents,
+# skills, hooks, rules, scripts, settings.json, MCP server wrappers)
+# baked into /opt/claude-stage at build time. This makes the full set of
+# CC v3 skills/agents available to `claude` immediately; no manual
+# `cc-setup` run is required for the file portion of the integration.
+# `cc-setup` is still available for users who additionally want the
+# optional Postgres-backed memory store, math packages, Loogle, etc.
+CC_STAGE="${CCODEBOX_CLAUDE_STAGE:-/opt/claude-stage}"
+CC_SEEDED="$CLAUDE_CONFIG_HOST/.ccodebox-cc-seeded"
+if [ -d "$CC_STAGE" ] && [ ! -f "$CC_SEEDED" ]; then
+  echo "[ccodebox] seeding $CLAUDE_CONFIG_HOST with Continuous Claude v3 integration"
+  for d in agents skills hooks rules servers plugins runtime scripts; do
+    if [ -d "$CC_STAGE/$d" ]; then
+      mkdir -p "$CLAUDE_CONFIG_HOST/$d"
+      cp -an "$CC_STAGE/$d/." "$CLAUDE_CONFIG_HOST/$d/" 2>/dev/null || \
+        cp -a  "$CC_STAGE/$d/." "$CLAUDE_CONFIG_HOST/$d/"
+    fi
+  done
+  if [ -f "$CC_STAGE/settings.json" ] && [ ! -s "$CLAUDE_CONFIG_HOST/settings.json" ]; then
+    cp "$CC_STAGE/settings.json" "$CLAUDE_CONFIG_HOST/settings.json"
+  fi
+  printf 'seeded from %s at %s\n' "$CC_STAGE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$CC_SEEDED"
+fi
+
 # Inject acceptEdits into the persistent Claude Code settings.json so the
 # CLI doesn't prompt for every edit. Uses jq merge so any pre-existing
-# user keys are preserved; falls back to a fresh write if jq fails.
+# user keys (including the cc-v3 hooks / statusLine seeded above) are
+# preserved; falls back to a fresh write if jq fails.
 CC_SETTINGS="$CLAUDE_CONFIG_HOST/settings.json"
 if [ ! -s "$CC_SETTINGS" ]; then printf '{}\n' > "$CC_SETTINGS"; fi
 tmp="$(mktemp)"
@@ -109,11 +134,14 @@ cd "$WORKSPACE_DIR"
 
 cat <<EOF
 [ccodebox] ----------------------------------------------------------------
-[ccodebox] OpenCode web UI:      http://localhost:${PORT}
-[ccodebox] Claude Code CLI:      docker exec -it ccodebox claude
-[ccodebox] Claude Code (opus):   docker exec -it ccodebox claude-opus
-[ccodebox] Continuous Claude:    docker exec -it ccodebox cc-setup
-[ccodebox] Workspace:            ${WORKSPACE_DIR}
+[ccodebox] OpenCode web UI:        http://localhost:${PORT}
+[ccodebox] Claude Code CLI:        docker exec -it ccodebox claude
+[ccodebox] Claude Code (opus):     docker exec -it ccodebox claude-opus
+[ccodebox] CC v3 skills/agents:    pre-installed in ~/.claude (seed marker:
+[ccodebox]                         ${CC_SEEDED})
+[ccodebox] Optional CC v3 extras:  docker exec -it ccodebox cc-setup
+[ccodebox]                         (Postgres-backed memory, math, Loogle)
+[ccodebox] Workspace:              ${WORKSPACE_DIR}
 [ccodebox] ----------------------------------------------------------------
 EOF
 
