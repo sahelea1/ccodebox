@@ -19,3 +19,7 @@ Thumbs.db
 *.swo
 .idea/
 .vscode/
+
+# Local Claude Code session state (created automatically when this repo is
+# opened in a Claude Code session). Not committed.
+.claude/
