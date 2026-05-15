@@ -11,9 +11,15 @@ pre-wired with the Continuous Claude / Continuous Code agent workflows.
 - **Claude Code CLI** (`@anthropic-ai/claude-code`) installed globally and
   ready to run via `docker exec -it ccodebox claude`.
 - **Continuous Claude v3** (parcadei/Continuous-Claude-v3) pre-cloned at
-  `/opt/continuous-claude`, with the setup wizard available via `cc-setup`.
-- **Python + uv** toolchain so the Continuous Claude wizard works out of
-  the box.
+  `/opt/continuous-claude`. The file portion of the integration — 32
+  agents, 100+ skills, 30 hooks, rules, MCP server wrappers, and
+  scripts — is **auto-seeded into `~/.claude` on first launch**, so
+  Claude Code has the full CC v3 skill/agent set without any manual
+  setup. The interactive `cc-setup` wizard is still available for
+  optional extras (Postgres-backed memory store, math packages, Loogle
+  theorem search).
+- **Python + uv** toolchain so the Continuous Claude wizard and the
+  auto-installed Python hooks work out of the box.
 - State persisted to a named docker volume (`ccodebox_data`) — survives
   `docker compose down`. Only `docker compose down -v` wipes it.
 
@@ -31,9 +37,13 @@ On the first run the entrypoint:
 1. Creates `/data/{workspace,opencode-config,opencode-share,claude/config}`.
 2. Seeds the opencode config with the continuous-code agents/commands.
 3. Symlinks `~/.claude` and `~/.claude.json` into `/data/claude/`.
-4. Writes `permissions.defaultMode = "acceptEdits"` into the Claude Code
-   `settings.json` so the CLI doesn't prompt for every edit.
-5. Launches `opencode web` on `0.0.0.0:7878`.
+4. Seeds `~/.claude` with the Continuous Claude v3 integration baked
+   into `/opt/claude-stage` (agents, skills, hooks, rules, scripts,
+   `settings.json`). Marker file: `~/.claude/.ccodebox-cc-seeded`.
+5. Merges `permissions.defaultMode = "acceptEdits"` into the Claude
+   Code `settings.json` so the CLI doesn't prompt for every edit while
+   preserving the cc-v3 hooks/statusLine.
+6. Launches `opencode web` on `0.0.0.0:7878`.
 
 ## Using Claude Code CLI
 
@@ -47,10 +57,28 @@ through interactive login. Credentials persist under
 `/data/claude/claude.json`, so they survive `docker compose down` and
 container recreation.
 
-## Setting up Continuous Claude inside the container
+## Continuous Claude v3 integration
 
-Continuous Claude v3 ships its own setup wizard. The image pre-clones the
-repo to `/opt/continuous-claude`; run the wizard with:
+The CC v3 file integration (32 agents, 100+ skills, 30 lifecycle
+hooks, rules, MCP server wrappers, helper scripts, and a wired-up
+`settings.json`) is **automatically installed** into `~/.claude` on the
+container's first launch from a stage directory baked into the image at
+build time (`/opt/claude-stage`). Claude Code can use the full CC v3
+skill set on the very first `claude` invocation — no manual `cc-setup`
+required.
+
+If you wipe the volume (`docker compose down -v`) or rebuild the
+image, the seed runs again. To force a fresh re-seed without wiping
+state, delete the marker:
+
+```bash
+docker exec -it ccodebox rm /data/claude/config/.ccodebox-cc-seeded
+docker compose restart ccodebox
+```
+
+The interactive `cc-setup` wizard is still available for optional
+extras (Postgres-backed memory store with pgvector, math packages,
+Loogle theorem search, embedding-model download). Run it with:
 
 ```bash
 docker exec -it ccodebox cc-setup

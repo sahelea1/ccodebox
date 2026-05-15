@@ -123,6 +123,57 @@ RUN echo "Cloning ${CONTINUOUS_CLAUDE_REPO_URL} at ${CONTINUOUS_CLAUDE_REF}" \
  && git clone "${CONTINUOUS_CLAUDE_REPO_URL}" /opt/continuous-claude \
  && git -C /opt/continuous-claude checkout "${CONTINUOUS_CLAUDE_REF}"
 
+# Pre-install the native runtime dependency the bundled hooks need
+# (`better-sqlite3` is marked external in the esbuild bundle, so it must
+# resolve from a node_modules tree at runtime). Doing this once at build
+# time means the seeded ~/.claude/hooks tree is fully self-contained.
+# `--omit=dev` skips esbuild/typescript/vitest, which we don't need at runtime.
+RUN cd /opt/continuous-claude/.claude/hooks \
+ && npm install --omit=dev --no-audit --no-fund
+
+# Stage the Continuous Claude v3 Claude-Code integration into a single
+# tree (/opt/claude-stage) that the entrypoint can rsync into the
+# persistent ~/.claude on first launch. This mirrors what the interactive
+# `cc-setup` wizard does in its "install Claude Code integration" step
+# (steps 8 of the 12-step wizard) so the file portion of CC v3 — the 32
+# agents, 100+ skills, 30 hooks, rules, MCP server wrappers, plugins,
+# scripts — is available the moment the container starts, with no manual
+# `cc-setup` run required. Heavier optional pieces (Postgres + pgvector
+# memory store, embedding model download, Lean/Loogle, math packages)
+# are left to the on-demand `cc-setup` wizard for users who want them.
+RUN set -e ; \
+    STAGE=/opt/claude-stage ; \
+    SRC=/opt/continuous-claude ; \
+    mkdir -p "$STAGE" ; \
+    for d in agents skills hooks rules servers plugins runtime scripts; do \
+      if [ -d "$SRC/.claude/$d" ]; then \
+        mkdir -p "$STAGE/$d" ; \
+        # -L: follow symlinks so the in-tree `.claude/scripts/mcp` symlink \
+        # (which points sideways at opc/scripts/mcp) becomes a real dir \
+        # in the stage and doesn't trip the per-subdir mkdir below. \
+        cp -aL "$SRC/.claude/$d/." "$STAGE/$d/" ; \
+      fi ; \
+    done ; \
+    if [ -f "$SRC/.claude/settings.json" ]; then \
+      cp "$SRC/.claude/settings.json" "$STAGE/settings.json" ; \
+    fi ; \
+    mkdir -p "$STAGE/scripts" ; \
+    for sub in core math tldr mcp; do \
+      if [ -d "$SRC/opc/scripts/$sub" ]; then \
+        mkdir -p "$STAGE/scripts/$sub" ; \
+        cp -a "$SRC/opc/scripts/$sub/." "$STAGE/scripts/$sub/" ; \
+      fi ; \
+    done ; \
+    for f in ast_grep_find.py braintrust_analyze.py qlty_check.py \
+             research_implement_pipeline.py test_research_pipeline.py \
+             multi_tool_pipeline.py recall_temporal_facts.py; do \
+      if [ -f "$SRC/opc/scripts/$f" ]; then \
+        cp "$SRC/opc/scripts/$f" "$STAGE/scripts/$f" ; \
+      fi ; \
+    done ; \
+    find "$STAGE" -type f \( -name '*.sh' -o -name '*.py' -o -name '*.mjs' -o -name '*.js' \) -exec chmod +x {} +
+
+
 # Small helper scripts so users can `docker exec -it ccodebox cc-setup` etc.
 # Source files live in ./helpers in the build context.
 COPY helpers/cc-setup helpers/cc-update helpers/cc-uninstall /usr/local/bin/
