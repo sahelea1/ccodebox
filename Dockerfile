@@ -105,6 +105,17 @@ RUN set -e ; \
     (cd /opt/opencode-config && npm install file:///opt/continuous-code --save) ; \
     cp /opt/continuous-code/opencode.json /opt/opencode-config/opencode.json
 
+# Patch orchestrator agent files to prevent recursive spawning of orchestrators
+RUN for f in /opt/opencode-config/agents/*.md; do \
+      [ -f "$f" ] || continue ; \
+      fname=$(basename "$f") ; \
+      name_line=$(grep -i '^name:' "$f" 2>/dev/null | head -1 | tr '[:upper:]' '[:lower:]' || true) ; \
+      if echo "$fname $name_line" | grep -qi 'orchestrator'; then \
+        echo "Patching orchestrator agent: $f" ; \
+        printf '\n\n**CRITICAL ORCHESTRATOR RULE**: YOU yourself ARE the orchestrator. You are NOT ALLOWED TO SPAWN OTHER ORCHESTRATOR NODES. Only spawn subagents of a DIFFERENT type. NEVER spawn another orchestrator agent under any circumstances.\n' >> "$f" ; \
+      fi ; \
+    done
+
 # Bring in Continuous Claude v3 (the parcadei/Continuous-Claude-v3 project)
 # pinned to a specific SHA. This is the python/uv-based "continuous claude"
 # wizard counterpart; it complements the Claude Code CLI.

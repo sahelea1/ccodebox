@@ -34,3 +34,4 @@ services:
       - ./claude-config:/root/.claude
       - ./opencode-config:/root/.config/opencode
       - ~/.ssh:/root/.ssh:ro
+      - /var/run/docker.sock:/var/run/docker.sock
