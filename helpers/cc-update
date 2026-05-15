@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "${CONTINUOUS_CLAUDE_REPO:-/opt/continuous-claude}/opc"
+exec uv run python -m scripts.setup.update "$@"
