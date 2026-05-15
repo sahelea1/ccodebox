@@ -39,6 +39,20 @@ if [ ! -f "$OPENCODE_CONFIG_DIR/.seeded" ]; then
   touch "$OPENCODE_CONFIG_DIR/.seeded"
 fi
 
+# Patch orchestrator agents to prevent recursive spawning (idempotent).
+# Runs every startup so already-seeded volumes get the fix too.
+for _f in "$OPENCODE_CONFIG_DIR/agents/"*.md; do
+  [ -f "$_f" ] || continue
+  _fname=$(basename "$_f")
+  _name_line=$(grep -i '^name:' "$_f" 2>/dev/null | head -1 | tr '[:upper:]' '[:lower:]' || true)
+  if echo "$_fname $_name_line" | grep -qi 'orchestrator'; then
+    if ! grep -q 'NOT ALLOWED TO SPAWN OTHER ORCHESTRATOR' "$_f"; then
+      echo "[ccodebox] patching orchestrator agent: $_fname"
+      printf '\n\n**CRITICAL ORCHESTRATOR RULE**: YOU yourself ARE the orchestrator. You are NOT ALLOWED TO SPAWN OTHER ORCHESTRATOR NODES. Only spawn subagents of a DIFFERENT type. NEVER spawn another orchestrator agent under any circumstances.\n' >> "$_f"
+    fi
+  fi
+done
+
 # Seed a workspace opencode.json so the user has a sensible default project
 # config wired to the continuous-code agents on first launch.
 if [ ! -f "$WORKSPACE_DIR/opencode.json" ]; then
