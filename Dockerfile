@@ -15,9 +15,11 @@ FROM node:20-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH="/root/.bun/bin:/root/.opencode/bin:/root/.local/bin:${PATH}" \
-    # Pin the continuous-code revision so rebuilds are reproducible.
+    # Track the continuous-code `dev` branch. Rebuilds pick up whatever is at
+    # the tip of `dev` at build time; use `docker compose build --no-cache` (or
+    # bust the layer some other way) to force a fresh checkout.
     CONTINUOUS_CODE_REPO="https://github.com/sahelea1/continuous-code.git" \
-    CONTINUOUS_CODE_REF="daa00c3eec83d9e91de6bc05701e901371956266" \
+    CONTINUOUS_CODE_REF="dev" \
     # Pin the opencode CLI version so rebuilds are reproducible and we don't
     # depend on api.github.com being reachable / unrate-limited at build time.
     OPENCODE_VERSION="1.14.50" \
