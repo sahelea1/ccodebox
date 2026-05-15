@@ -23,6 +23,10 @@ services:
       # OLLAMA_API_KEY is read from .env (gitignored). The .env.example file
       # documents the required name. Never commit the value.
       OLLAMA_API_KEY: "${OLLAMA_API_KEY:-}"
+      # ANTHROPIC_API_KEY for the Claude Code CLI (optional — Claude Code can
+      # also auth interactively via `claude login` and the resulting token is
+      # persisted under /data/claude).
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       OPENCODE_PORT: "7878"
       OPENCODE_HOSTNAME: "0.0.0.0"
     volumes:

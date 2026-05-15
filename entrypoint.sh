@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# ccodebox entrypoint.
+# ccodebox entrypoint (docker-web merged variant).
 #
-# Wires the persistent /data volume to the locations opencode and
-# continuous-code expect, then launches the opencode web UI bound to
-# 0.0.0.0:7878 so it is reachable from the host.
+# Wires the persistent /data volume to the locations opencode and Claude Code
+# expect, then launches the opencode web UI bound to 0.0.0.0:7878 so it is
+# reachable from the host. The Claude Code CLI is available alongside, run via
+# `docker exec -it ccodebox claude`.
 
 set -euo pipefail
 
@@ -11,6 +12,8 @@ DATA_ROOT="${CCODEBOX_DATA_ROOT:-/data}"
 WORKSPACE_DIR="$DATA_ROOT/workspace"
 OPENCODE_CONFIG_DIR="$DATA_ROOT/opencode-config"
 OPENCODE_SHARE_DIR="$DATA_ROOT/opencode-share"
+CLAUDE_CONFIG_HOST="$DATA_ROOT/claude/config"
+CLAUDE_JSON_HOST="$DATA_ROOT/claude/claude.json"
 THOUGHTS_DIR="$WORKSPACE_DIR/thoughts"
 
 PORT="${OPENCODE_PORT:-7878}"
@@ -20,8 +23,11 @@ mkdir -p \
   "$WORKSPACE_DIR" \
   "$OPENCODE_CONFIG_DIR" \
   "$OPENCODE_SHARE_DIR" \
+  "$CLAUDE_CONFIG_HOST" \
   "$THOUGHTS_DIR/shared/handoffs" \
   "$THOUGHTS_DIR/ledgers"
+
+touch "$CLAUDE_JSON_HOST"
 
 # First-time-setup: seed the persistent opencode config with the
 # continuous-code agents, commands, plugin, and opencode.json baked into
@@ -55,10 +61,26 @@ if [ ! -d "$WORKSPACE_DIR/.git" ]; then
   )
 fi
 
-# Symlink the persistent directories to the paths opencode expects in $HOME.
+# Symlink the persistent directories to the paths opencode and Claude Code
+# expect in $HOME. Using `ln -sfn` is idempotent across container restarts.
 mkdir -p /root/.config /root/.local/share
 ln -sfn "$OPENCODE_CONFIG_DIR" /root/.config/opencode
 ln -sfn "$OPENCODE_SHARE_DIR"  /root/.local/share/opencode
+ln -sfn "$CLAUDE_CONFIG_HOST"  /root/.claude
+ln -sfn "$CLAUDE_JSON_HOST"    /root/.claude.json
+
+# Inject acceptEdits into the persistent Claude Code settings.json so the
+# CLI doesn't prompt for every edit. Uses jq merge so any pre-existing
+# user keys are preserved; falls back to a fresh write if jq fails.
+CC_SETTINGS="$CLAUDE_CONFIG_HOST/settings.json"
+if [ ! -s "$CC_SETTINGS" ]; then printf '{}\n' > "$CC_SETTINGS"; fi
+tmp="$(mktemp)"
+if jq '.permissions.defaultMode = "acceptEdits"' "$CC_SETTINGS" > "$tmp" 2>/dev/null; then
+  mv "$tmp" "$CC_SETTINGS"
+else
+  rm -f "$tmp"
+  printf '%s\n' '{"permissions":{"defaultMode":"acceptEdits"}}' > "$CC_SETTINGS"
+fi
 
 # Sanity warn if no key was supplied. Don't fail; opencode itself will
 # tell the user when they try to send a message.
@@ -71,8 +93,17 @@ fi
 
 cd "$WORKSPACE_DIR"
 
+cat <<EOF
+[ccodebox] ----------------------------------------------------------------
+[ccodebox] OpenCode web UI:      http://localhost:${PORT}
+[ccodebox] Claude Code CLI:      docker exec -it ccodebox claude
+[ccodebox] Claude Code (opus):   docker exec -it ccodebox claude-opus
+[ccodebox] Continuous Claude:    docker exec -it ccodebox cc-setup
+[ccodebox] Workspace:            ${WORKSPACE_DIR}
+[ccodebox] ----------------------------------------------------------------
+EOF
+
 echo "[ccodebox] starting opencode web on ${HOSTNAME}:${PORT}"
-echo "[ccodebox] workspace: $WORKSPACE_DIR"
 
 # opencode web is the browser UI. --hostname 0.0.0.0 makes it reachable on
 # the published port. BROWSER=true skips the automatic browser launch
